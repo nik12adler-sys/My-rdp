@@ -1,0 +1,32 @@
+name: RDP
+
+on: workflow_dispatch
+
+jobs:
+  rdp:
+    runs-on: windows-latest
+    timeout-minutes: 350
+    steps:
+      - name: Enable RDP and create user
+        shell: pwsh
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name UserAuthentication -Value 1
+          net user rdpuser "${{ secrets.RDP_PASSWORD }}" /add
+          net localgroup "Remote Desktop Users" rdpuser /add
+          net localgroup Administrators rdpuser /add
+
+      - name: Start ngrok tunnel
+        shell: pwsh
+        run: |
+          choco install ngrok -y
+          ngrok config add-authtoken "${{ secrets.NGROK_TOKEN }}"
+          Start-Process ngrok -ArgumentList "tcp 3389 --log=stdout" -RedirectStandardOutput ngrok.log
+          Start-Sleep -Seconds 10
+          $t = (Invoke-RestMethod http://127.0.0.1:4040/api/tunnels).tunnels[0].public_url
+          Write-Host "ADDRESS: $t"
+
+      - name: Keep alive
+        shell: pwsh
+        run: Start-Sleep -Seconds 20000
